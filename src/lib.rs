@@ -7,7 +7,9 @@ use crate::erc20::Erc20;
 // Modules and imports
 mod constants;
 mod structs;
-use alloy_sol_types::sol;
+// use alloy_sol_types::sol;
+use alloy::sol;
+
 
 use alloy_primitives::{Address, B256, U256};
 
@@ -69,14 +71,12 @@ sol! {
     event RoleAdminChanged(bytes32 indexed role, bytes32 indexed previous_admin_role, bytes32 indexed new_admin_role);
     event RoleGranted(bytes32 indexed role, address indexed account, address indexed sender);
     event RoleRevoked(bytes32 indexed role, address indexed account, address indexed sender);
-    error AccessControlUnauthorizedAccount(address account, bytes32 needed_role);
     error AccessControlBadConfirmation();
 
 
     // Ownable
     event OwnershipTransferred(address indexed previous_owner, address indexed new_owner);
-    error OwnableUnauthorizedAccount(address account);
-    error OwnableInvalidOwner(address owner);
+    error UnauthorizedAccount(address account);
 }
 
 /// Represents the ways methods may fail.
@@ -87,11 +87,8 @@ pub enum ATONError {
     AlreadyInitialized(AlreadyInitialized),
 
     // Access Control
-    AccessUnauthorizedAccount(AccessControlUnauthorizedAccount),
+    UnauthorizedAccount(UnauthorizedAccount),
     BadConfirmation(AccessControlBadConfirmation),
-    // Ownable
-    UnauthorizedAccount(OwnableUnauthorizedAccount),
-    InvalidOwner(OwnableInvalidOwner),
 }
 
 #[public]
@@ -233,40 +230,32 @@ impl ATON {
 
 
 
-    pub fn grant_engine_and_oracle_role(
-        &mut self,
-        account: Address,
-        role_id: u8,
-    ) -> Result<(), ATONError> {
-        let admin_role = self._get_role_admin(constants::ARENATON_ENGINE_ROLE.into());
-        self._check_role(admin_role , msg::sender())?;   
+pub fn update_role(
+    &mut self,
+    account: Address,
+    role_id: u8,
+    grant: bool, // Boolean to specify grant or revoke
+) -> Result<(), ATONError> {
+    let admin_role = self._get_role_admin(constants::ARENATON_ENGINE_ROLE.into());
+    self._check_role(admin_role, msg::sender())?;
+
+    if grant {
         if role_id == 1 {
             self._grant_role(constants::ARENATON_ENGINE_ROLE.into(), account);
-            // Add missing closing parenthesis
-        }
-        if role_id == 2 {
+        } else if role_id == 2 {
             self._grant_role(constants::ARENATON_ORACLE_ROLE.into(), account);
-            // Add missing closing parenthesis
         }
-        Ok(())
-    }
-
-    pub fn revoke_engine_and_oracle_role(
-        &mut self,
-        account: Address,
-        role_id: u8,
-    ) -> Result<(), ATONError> {
-        let admin_role = self._get_role_admin(constants::ARENATON_ENGINE_ROLE.into());
-        self._check_role(admin_role , msg::sender())?;   
-
+    } else {
         if role_id == 1 {
             self._revoke_role(constants::ARENATON_ENGINE_ROLE.into(), account);
-        }
-        if role_id == 2 {
+        } else if role_id == 2 {
             self._revoke_role(constants::ARENATON_ORACLE_ROLE.into(), account);
         }
-        Ok(())
     }
+
+    Ok(())
+}
+
 }
 
 // Private Functions
@@ -308,7 +297,7 @@ impl ATON {
 
         // 2) Multiply that by player balance
         let balance = self.erc20.balance_of(player);
-let decimals = U256::from(10).pow(U256::from(18));
+        let decimals = U256::from(10).pow(U256::from(18));
     // Optional extra precision factor (pct_denom)
         let pct_denom = U256::from(10000000u64);
 
@@ -358,10 +347,6 @@ let decimals = U256::from(10).pow(U256::from(18));
             }
         }
 
-        // Finally, update player's last known commission-per-token
-
-
-
 
         info.last_commission_per_token.set(self.accumulated_commission_per_token.get());
     }
@@ -380,10 +365,9 @@ let decimals = U256::from(10).pow(U256::from(18));
  
     pub fn _check_role(&self, role: B256, account: Address) -> Result<(), ATONError> {
         if !self._has_role(role, account) {
-            return Err(ATONError::AccessUnauthorizedAccount(
-                AccessControlUnauthorizedAccount {
-                    account,
-                    needed_role: role,
+            return Err(ATONError::UnauthorizedAccount(
+                UnauthorizedAccount {
+                    account
                 },
             ));
         }
