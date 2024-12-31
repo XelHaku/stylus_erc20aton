@@ -86,24 +86,24 @@ pub enum ATONError {
 #[public]
 #[inherit(Erc20)]
 impl ATON {
-    // pub fn initialize(&mut self) -> Result<bool, ATONError> {
-    //     if self.initialized.get() {
-    //         // Access the value using .get()
-    //         return Err(ATONError::AlreadyInitialized(AlreadyInitialized {})); // Add the error struct
-    //     }
-    //     self.initialized.set(true); // Set initialized to true
-    //     self.owner.set(msg::sender());
-    //     self._grant_role(
-    //        constants::DEFAULT_ADMIN_ROLE.into(),
-    //         msg::sender(),
-    //     );
-    //     Ok(true)
-    // }
+    pub fn initialize(&mut self) -> Result<bool, ATONError> {
+        if self.initialized.get() {
+            // Access the value using .get()
+            return Err(ATONError::AlreadyInitialized(AlreadyInitialized {})); // Add the error struct
+        }
+        self.initialized.set(true); // Set initialized to true
+        self.owner.set(msg::sender());
+        self._grant_role(
+           constants::DEFAULT_ADMIN_ROLE.into(),
+            msg::sender(),
+        );
+        Ok(true)
+    }
 
     /// 4. Emit a `DonateATON` event.
     ///
     /// # Errors
-
+#[payable]
     pub fn donate_eth(&mut self) -> Result<bool, ATONError> {
         let amount = msg::value(); // Ether sent with the transaction
         let sender = msg::sender(); // Address of the sender
