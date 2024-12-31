@@ -69,7 +69,6 @@ sol! {
     event RoleAdminChanged(bytes32 indexed role, bytes32 indexed previous_admin_role, bytes32 indexed new_admin_role);
     event RoleGranted(bytes32 indexed role, address indexed account, address indexed sender);
     event RoleRevoked(bytes32 indexed role, address indexed account, address indexed sender);
-    error AccessControlBadConfirmation();
 
 
     // Ownable
@@ -86,7 +85,6 @@ pub enum ATONError {
 
     // Access Control
     UnauthorizedAccount(UnauthorizedAccount),
-    BadConfirmation(AccessControlBadConfirmation),
 }
 
 #[public]
@@ -228,31 +226,31 @@ impl ATON {
 
 
 
-pub fn update_role(
-    &mut self,
-    account: Address,
-    role_id: u8,
-    grant: bool, // Boolean to specify grant or revoke
-) -> Result<(), ATONError> {
-    let admin_role = self._get_role_admin(constants::ARENATON_ENGINE_ROLE.into());
-    self._check_role(admin_role, msg::sender())?;
+// pub fn update_role(
+//     &mut self,
+//     account: Address,
+//     role_id: u8,
+//     grant: bool, // Boolean to specify grant or revoke
+// ) -> Result<(), ATONError> {
+//     let admin_role = self._get_role_admin(constants::ARENATON_ENGINE_ROLE.into());
+//     self._check_role(admin_role, msg::sender())?;
 
-    if grant {
-        if role_id == 1 {
-            self._grant_role(constants::ARENATON_ENGINE_ROLE.into(), account);
-        } else if role_id == 2 {
-            self._grant_role(constants::ARENATON_ORACLE_ROLE.into(), account);
-        }
-    } else {
-        if role_id == 1 {
-            self._revoke_role(constants::ARENATON_ENGINE_ROLE.into(), account);
-        } else if role_id == 2 {
-            self._revoke_role(constants::ARENATON_ORACLE_ROLE.into(), account);
-        }
-    }
+//     if grant {
+//         if role_id == 1 {
+//             self._grant_role(constants::ARENATON_ENGINE_ROLE.into(), account);
+//         } else if role_id == 2 {
+//             self._grant_role(constants::ARENATON_ORACLE_ROLE.into(), account);
+//         }
+//     } else {
+//         if role_id == 1 {
+//             self._revoke_role(constants::ARENATON_ENGINE_ROLE.into(), account);
+//         } else if role_id == 2 {
+//             self._revoke_role(constants::ARENATON_ORACLE_ROLE.into(), account);
+//         }
+//     }
 
-    Ok(())
-}
+//     Ok(())
+// }
 
 }
 
