@@ -157,29 +157,29 @@ impl ATON {
             .map_err(|_| ATONError::ZeroAton(ZeroAton { sender: caller }))
     }
 
-    pub fn swap(&mut self, amount: U256) -> Result<bool, ATONError> {
-        if amount == U256::from(0) {
-            return Err(ATONError::ZeroAton(ZeroAton {
-                sender: msg::sender(),
-            }));
-        }
+    // pub fn swap(&mut self, amount: U256) -> Result<bool, ATONError> {
+    //     if amount == U256::from(0) {
+    //         return Err(ATONError::ZeroAton(ZeroAton {
+    //             sender: msg::sender(),
+    //         }));
+    //     }
 
-        if self.erc20.balance_of(msg::sender()) < amount {
-            return Err(ATONError::ZeroAton(ZeroAton {
-                sender: msg::sender(),
-            }));
-        }
+    //     if self.erc20.balance_of(msg::sender()) < amount {
+    //         return Err(ATONError::ZeroAton(ZeroAton {
+    //             sender: msg::sender(),
+    //         }));
+    //     }
 
-        if contract::balance() < amount {
-            return Err(ATONError::ZeroEther(ZeroEther {
-                sender: msg::sender(),
-            })); // error
-        }
+    //     if contract::balance() < amount {
+    //         return Err(ATONError::ZeroEther(ZeroEther {
+    //             sender: msg::sender(),
+    //         })); // error
+    //     }
 
-        let _ = transfer_eth(msg::sender(), amount);
+    //     let _ = transfer_eth(msg::sender(), amount);
 
-        Ok(true)
-    }
+    //     Ok(true)
+    // }
 
     // pub fn summary(&mut self, player: Address) -> Result<(U256, U256, U256), ATONError> {
     //     Ok((
@@ -269,9 +269,9 @@ impl ATON {
         Ok(())
     }
 
-    pub fn _get_role_admin(&self, role: B256) -> B256 {
-        *self._roles.getter(role).admin_role
-    }
+    // pub fn _get_role_admin(&self, role: B256) -> B256 {
+    //     *self._roles.getter(role).admin_role
+    // }
     /// Returns the unclaimed commission for a player
     pub fn _player_commission(&self, player: Address) -> U256 {
         // 1) Figure out how much is owed per token since last time
@@ -333,15 +333,15 @@ impl ATON {
     }
     // Access Control
 
-    pub fn _check_role(&self, role: B256, account: Address) -> Result<(), ATONError> {
-        if !self._has_role(role, account) {
-            return Err(ATONError::UnauthorizedAccount(UnauthorizedAccount {
-                account,
-            }));
-        }
+    // pub fn _check_role(&self, role: B256, account: Address) -> Result<(), ATONError> {
+    //     if !self._has_role(role, account) {
+    //         return Err(ATONError::UnauthorizedAccount(UnauthorizedAccount {
+    //             account,
+    //         }));
+    //     }
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
     pub fn _grant_role(&mut self, role: B256, account: Address) -> bool {
         if self._has_role(role, account) {
@@ -357,19 +357,19 @@ impl ATON {
         }
     }
 
-    pub fn _revoke_role(&mut self, role: B256, account: Address) -> bool {
-        if self._has_role(role, account) {
-            self._roles.setter(role).has_role.insert(account, false);
-            evm::log(RoleRevoked {
-                role,
-                account,
-                sender: msg::sender(),
-            });
-            true
-        } else {
-            false
-        }
-    }
+    // pub fn _revoke_role(&mut self, role: B256, account: Address) -> bool {
+    //     if self._has_role(role, account) {
+    //         self._roles.setter(role).has_role.insert(account, false);
+    //         evm::log(RoleRevoked {
+    //             role,
+    //             account,
+    //             sender: msg::sender(),
+    //         });
+    //         true
+    //     } else {
+    //         false
+    //     }
+    // }
 
     pub fn _has_role(&self, role: B256, account: Address) -> bool {
         self._roles.getter(role).has_role.get(account)
