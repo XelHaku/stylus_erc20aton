@@ -7,9 +7,7 @@ use crate::erc20::Erc20;
 // Modules and imports
 mod constants;
 mod structs;
-// use alloy_sol_types::sol;
-use alloy::sol;
-
+use alloy_sol_types::sol;
 
 use alloy_primitives::{Address, B256, U256};
 
