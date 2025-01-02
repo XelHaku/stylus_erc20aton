@@ -3,28 +3,21 @@
 extern crate alloc;
 
 // Modules and imports
-mod constants;
 
-// use alloy_sol_types::sol;
-use stylus_sdk::{alloy_sol_types::sol,call::transfer_eth, contract, evm, msg,alloy_primitives::{Address, B256, U256}};
-
+use stylus_sdk::{alloy_sol_types::sol,call::transfer_eth, contract, evm, msg,alloy_primitives::{Address, U256}};
 use stylus_sdk::prelude::*;
-
+// use alloy_sol_macro::sol;
 // `Counter` will be the entrypoint.
 sol_storage! {
     #[entrypoint]
     pub struct ATON {
-        bool initialized ;
-
-
         uint256  accumulated_commission_per_token;
         uint256  total_commission_in_aton;
-        uint256  current_pot;
-        mapping(address => PlayerInfo) players;
+        mapping(address => uint256) last_commission_per_token;
+        mapping(address => uint256) claimed_commissions;
 
 
         address owner;
-        mapping(bytes32 => RoleData) _roles;
                             /// Maps users to balances
         mapping(address => uint256) balances;
         /// Maps users to a mapping of each spender's allowance
@@ -32,20 +25,13 @@ sol_storage! {
         /// The total supply of the token
         uint256 total_supply;
 
+        mapping(address => bool) arenaton_engine;
+
+
+
     }
 
 
-    pub struct RoleData {
-        /// Whether an account is member of a certain role.
-        mapping(address => bool) has_role;
-        /// The admin role for this role.
-        bytes32 admin_role;
-    }
-
-    pub struct PlayerInfo {
-        uint256 last_commission_per_token;
-        uint256 claimed_commissions;
-}
 
 
 
@@ -57,16 +43,15 @@ sol! {
     // ATON
     event CommissionAccumulate(uint256 indexed amount, uint256 indexed newAccPerToken, uint256 indexed totalCommission);
 
-    error ZeroEther(address sender);
-    error ZeroAton(address sender);
-    error AlreadyInitialized();
+    error Zero(address account);
 
         // Access Control
-    event RoleGranted(bytes32 indexed role, address indexed account, address indexed sender);
-    event RoleRevoked(bytes32 indexed role, address indexed account, address indexed sender);
+    // event RoleGranted(bytes32 indexed role, address indexed account, address indexed sender);
+    // event RoleRevoked(bytes32 indexed role, address indexed account, address indexed sender);
 
 
-    // Ownable
+    // Ownership
+    event OwnershipTransferred(address indexed previous_owner, address indexed new_owner);
     error UnauthorizedAccount(address account);
 
      // ERC20
@@ -79,15 +64,10 @@ sol! {
 /// Represents the ways methods may fail.
 #[derive(SolidityError)]
 pub enum ATONError {
-    ZeroEther(ZeroEther),
-    ZeroAton(ZeroAton),
-    AlreadyInitialized(AlreadyInitialized),
-
-    // Access Control
-    UnauthorizedAccount(UnauthorizedAccount),
-
-        InsufficientBalance(InsufficientBalance),
+    InsufficientBalance(InsufficientBalance),
+    Zero(Zero),
     InsufficientAllowance(InsufficientAllowance),
+    UnauthorizedAccount(UnauthorizedAccount),
 }
 
 #[public]
@@ -163,42 +143,39 @@ impl ATON {
     pub fn allowance(&self, owner: Address, spender: Address) -> U256 {
         self.allowances.getter(owner).get(spender)
     }
-    pub fn initialize(&mut self) -> Result<bool, ATONError> {
-        if self.initialized.get() {
-            // Access the value using .get()
-            return Err(ATONError::AlreadyInitialized(AlreadyInitialized {})); // Add the error struct
+
+
+    fn owner(&self) -> Address {
+        self.owner.get()
+    }
+
+    fn transfer_ownership(&mut self, new_owner: Address) -> Result<(), ATONError> {
+        self.only_owner()?;
+
+        if new_owner.is_zero() {
+            return Err(ATONError::UnauthorizedAccount(UnauthorizedAccount {
+                account: Address::ZERO,
+            }));
         }
-        self.initialized.set(true); // Set initialized to true
+
+        self._transfer_ownership(new_owner);
+
+        Ok(())
+    }
+    pub fn initialize(&mut self) -> Result<bool, ATONError> {
+        if self.owner.get() != Address::ZERO {
+            // Access the value using .get()
+            return Err(ATONError::Zero(Zero {account: msg::sender()})); // Add the error struct
+        }
         self.owner.set(msg::sender());
-        self._grant_role(constants::DEFAULT_ADMIN_ROLE.into(), msg::sender());
         Ok(true)
     }
 
-    /// 4. Emit a `DonateATON` event.
-    ///
-    /// # Errors
-    // #[payable]
-    //     pub fn donate_eth(&mut self) -> Result<bool, ATONError> {
-    //         let amount = msg::value(); // Ether sent with the transaction
-    //         let sender = msg::sender(); // Address of the sender
 
-    //         // Ensure the transaction includes some Ether to donate
-    //         if amount == U256::from(0) {
-    //             return Err(ATONError::ZeroEther(ZeroEther { sender }));
-    //         }
-    //         let _ = self.add_commission(amount);
-    //         // Mint equivalent ATON tokens to the sender
-    //         let _ = self.mint(contract::address(), amount);
-
-    //         // Emit the `DonateATON` event
-    //         evm::log(DonateATON { sender, amount });
-    //         Ok(true)
-    //     }
 
     #[payable]
     pub fn mint_aton(&mut self) -> Result<bool, ATONError> {
-        let is_engine = self._has_role(constants::ARENATON_ENGINE_ROLE.into(), msg::sender());
-
+     let is_engine =self.arenaton_engine.get(msg::sender());
         if is_engine == false {
             return Err(ATONError::UnauthorizedAccount(UnauthorizedAccount {
                 account: msg::sender(),
@@ -213,14 +190,12 @@ impl ATON {
     pub fn accumulate_aton(&mut self, amount: U256) -> Result<bool, ATONError> {
         // Ensure the transaction includes some Ether to donate
         if amount == U256::from(0) {
-            return Err(ATONError::ZeroAton(ZeroAton {
-                sender: msg::sender(),
-            }));
+                     return Err(ATONError::Zero(Zero {account: msg::sender()})); // Add the error struct
+
         }
         let _ = self.transfer(contract::address(), amount);
         let _ = self.add_commission(amount);
 
-        // Emit the `DonateATON` event
         evm::log(CommissionAccumulate {
             amount,
             newAccPerToken: self.accumulated_commission_per_token.get(),
@@ -238,32 +213,24 @@ impl ATON {
         self
             ._transfer(caller, to, amount)
             .map(|_| true)
-            .map_err(|_| ATONError::ZeroAton(ZeroAton { sender: caller }))
+            .map_err(|_| ATONError::InsufficientBalance(InsufficientBalance {                 from: msg::sender(),want: amount, have: self.balances.get(msg::sender())
+ }))
     }
 
-    // pub fn swap(&mut self, amount: U256) -> Result<bool, ATONError> {
-    //     if amount == U256::from(0) {
-    //         return Err(ATONError::ZeroAton(ZeroAton {
-    //             sender: msg::sender(),
-    //         }));
-    //     }
+pub fn swap(&mut self, amount: U256) -> Result<bool, ATONError> {
+    let sender = msg::sender();
 
-    //     if self.balance_of(msg::sender()) < amount {
-    //         return Err(ATONError::ZeroAton(ZeroAton {
-    //             sender: msg::sender(),
-    //         }));
-    //     }
+    let contract_balance = contract::balance();
 
-    //     if contract::balance() < amount {
-    //         return Err(ATONError::ZeroEther(ZeroEther {
-    //             sender: msg::sender(),
-    //         })); // error
-    //     }
+    if amount == U256::from(0) || self.balances.get(sender) < amount || contract_balance < amount {
+            return Err(ATONError::Zero(Zero {account: sender})); // Add the error struct
 
-    //     let _ = transfer_eth(msg::sender(), amount);
+    }
+        let _ = transfer_eth(sender, amount);
 
-    //     Ok(true)
-    // }
+    Ok(true)
+}
+
 
     // pub fn summary(&mut self, player: Address) -> Result<(U256, U256, U256), ATONError> {
     //     Ok((
@@ -273,48 +240,36 @@ impl ATON {
     //     ))
     // }
 
-    // pub fn is_oracle(&self, account: Address) -> bool {
-    //     self._has_role(constants::ARENATON_ORACLE_ROLE.into(), account)
-    // }
 
-    // Ownable
 
-    // Access Control
 
-    // pub fn update_role(
-    //     &mut self,
-    //     account: Address,
-    //     role_id: u8,
-    //     grant: bool, // Boolean to specify grant or revoke
-    // ) -> Result<(), ATONError> {
-    //     if !self._has_role(
-    //         self._get_role_admin(constants::ARENATON_ENGINE_ROLE.into()),
-    //         msg::sender(),
-    //     ) {
-    //         return Err(ATONError::UnauthorizedAccount(UnauthorizedAccount {
-    //             account,
-    //         }));
-    //     }
-    //     if grant {
-    //         if role_id == 1 {
-    //             self._grant_role(constants::ARENATON_ENGINE_ROLE.into(), account);
-    //         } else if role_id == 2 {
-    //             self._grant_role(constants::ARENATON_ORACLE_ROLE.into(), account);
-    //         }
-    //     } else {
-    //         if role_id == 1 {
-    //             self._revoke_role(constants::ARENATON_ENGINE_ROLE.into(), account);
-    //         } else if role_id == 2 {
-    //             self._revoke_role(constants::ARENATON_ORACLE_ROLE.into(), account);
-    //         }
-    //     }
-
-    //     Ok(())
-    // }
 }
 
 // Private Functions
-impl ATON {
+impl ATON { 
+    
+    // Ownable 
+    pub fn only_owner(&self) -> Result<(), ATONError> {
+        let account = msg::sender();
+        if self.owner.get() != account {
+            return Err(ATONError::UnauthorizedAccount(
+                UnauthorizedAccount { account },
+            ));
+        }
+
+        Ok(())
+    }
+
+    pub fn _transfer_ownership(&mut self, new_owner: Address) {
+        let previous_owner = self.owner.get();
+        self.owner.set(new_owner);
+        evm::log(OwnershipTransferred {
+            previous_owner,
+            new_owner,
+        });
+    }
+
+    // Commission Management
     fn handle_commissions(&mut self, caller: Address, to: Address) {
         // Distribute commission to the caller
         if caller != contract::address() {
@@ -353,18 +308,17 @@ impl ATON {
         Ok(())
     }
 
-    // pub fn _get_role_admin(&self, role: B256) -> B256 {
-    //     *self._roles.getter(role).admin_role
-    // }
+  
     /// Returns the unclaimed commission for a player
     pub fn _player_commission(&self, player: Address) -> U256 {
         // 1) Figure out how much is owed per token since last time
         let owed_per_token = self
             .accumulated_commission_per_token
-            .saturating_sub(self.players.get(player).last_commission_per_token.get());
+            .saturating_sub(self.last_commission_per_token.get(player));
 
         // 2) Multiply that by player balance
-        let balance = self.balance_of(player);
+       let balance =  self.balances.get(player);
+
         let decimals = U256::from(10).pow(U256::from(18));
         // Optional extra precision factor (pct_denom)
         let pct_denom = U256::from(10000000u64);
@@ -396,71 +350,25 @@ pub fn distribute_commission(&mut self, player: Address) {
         };
 
         // Check balance and perform transfer in a separate block
-        if self.balance_of(contract::address()) >= unclaimed {
+        if self.balances.get(contract::address()) >= unclaimed {
             // Perform the transfer
             if let Ok(_) = self._transfer(contract::address(), pay_to, unclaimed) {
                 // Update claimed commissions in a separate scope to avoid mutable borrow overlap
                 {
-                    let mut info = self.players.setter(player);
-                    let _claimed = info.claimed_commissions.get();
-                    info.claimed_commissions.set(unclaimed + _claimed);
+                    let mut claimed_commissions = self.claimed_commissions.setter(player);
+                    let _claimed = claimed_commissions.get();
+                    claimed_commissions.set(unclaimed + _claimed);
                 }
             }
         }
     }
 
     // Update last_commission_per_token after mutable borrows are dropped
-    self.players.setter(player)
-        .last_commission_per_token
+    self.last_commission_per_token.setter(player)
         .set(self.accumulated_commission_per_token.get());
 }
 
-    // Access Control
-
-    // pub fn _check_role(&self, role: B256, account: Address) -> Result<(), ATONError> {
-    //     if !self._has_role(role, account) {
-    //         return Err(ATONError::UnauthorizedAccount(UnauthorizedAccount {
-    //             account,
-    //         }));
-    //     }
-
-    //     Ok(())
-    // }
-
-    pub fn _grant_role(&mut self, role: B256, account: Address) -> bool {
-        if self._has_role(role, account) {
-            false
-        } else {
-            self._roles.setter(role).has_role.insert(account, true);
-            evm::log(RoleGranted {
-                role,
-                account,
-                sender: msg::sender(),
-            });
-            true
-        }
-    }
-
-    // pub fn _revoke_role(&mut self, role: B256, account: Address) -> bool {
-    //     if self._has_role(role, account) {
-    //         self._roles.setter(role).has_role.insert(account, false);
-    //         evm::log(RoleRevoked {
-    //             role,
-    //             account,
-    //             sender: msg::sender(),
-    //         });
-    //         true
-    //     } else {
-    //         false
-    //     }
-    // }
-
-    pub fn _has_role(&self, role: B256, account: Address) -> bool {
-        self._roles.getter(role).has_role.get(account)
-    }
-
-     /// Movement of funds between 2 accounts
-    /// (invoked by the public transfer() and transfer_from() functions )
+// Token Management   
     pub fn _transfer(&mut self, from: Address, to: Address, value: U256) -> Result<(), ATONError> {
         // Decreasing sender balance
         let mut sender_balance = self.balances.setter(from);
