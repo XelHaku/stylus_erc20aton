@@ -256,14 +256,6 @@ impl Erc20Aton {
         }
 
         let _ = self._mint(msg::sender(), msg::value());
-        // Increasing balance
-        let mut balance = self.balances.setter(msg::sender());
-        let new_balance = balance.get() + msg::value();
-        balance.set(new_balance);
-
-        // Increasing total supply
-        self.total_supply
-            .set(self.total_supply.get() + msg::value());
 
         // Emitting the transfer event
         evm::log(Transfer {
@@ -274,6 +266,30 @@ impl Erc20Aton {
 
         true
     }
+
+    pub fn mint_aton_debug(&mut self, _amount: U256) -> bool {
+    
+
+        let _ = self._mint(msg::sender(), _amount);
+        // // // Increasing balance
+        // let mut balance = self.balances.setter(msg::sender());
+        // let new_balance = balance.get() + _amount;
+        // balance.set(new_balance);
+
+        // // // Increasing total supply
+        // self.total_supply
+        //     .set(self.total_supply.get() + _amount);
+
+        // Emitting the transfer event
+        evm::log(Transfer {
+            from: Address::ZERO,
+            to: msg::sender(),
+            value: _amount,
+        });
+
+        true
+    }
+
 
     pub fn swap(&mut self, amount: U256) -> Result<bool, ATONError> {
         let sender = msg::sender();
@@ -305,6 +321,10 @@ impl Erc20Aton {
         evm::log(EngineUpdated { account, status });
 
         Ok(())
+    }
+
+    pub fn is_engine(&self, account: Address) -> bool {
+        self.arenaton_engine.get(account)
     }
 }
 

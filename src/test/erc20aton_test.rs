@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::{test::constants::env_vars::get_env_vars, Erc20Aton};
+    use crate::Erc20Aton;
     use stylus_sdk::{
         alloy_primitives::{address, Address, U256},msg,
         prelude::*,
@@ -10,7 +10,7 @@ mod tests {
     // If you are not actually using these two, comment them out:
     // use crate::test::constants::env_vars::{get_env_vars, EnvVars};
     const VAULT_ADDRESS: &str = "0x7e32B54800705876D3B5CfBC7d9C226A211F7C1A";
-
+const ARENATON_ENGINE: &str = "0x7e32B54800705876D3B5CfBC7d9C226A211F7C1A";
     #[motsu::test]
     fn erc20params(contract: Erc20Aton) {
         let name = contract.name();
@@ -52,50 +52,66 @@ mod tests {
         contract.set_vault(parsed);
         assert_eq!(contract.vault_address(), parsed);
     }
+#[motsu::test]
+fn mint_aton_debug_test(contract: Erc20Aton) {
+    // Get the address of the sender to check balances and interact with the contract
+    let sender = msg::sender();
+
+    // Retrieve the initial total supply of the token
+    let mut _total_supply = contract.total_supply();
+
+    // Check the sender's initial balance
+    let mut _balance = contract.balances.get(sender);
+
+    // Log the initial total supply to the console for debugging purposes
+    println!("\n\nTotal Supply: {}", _total_supply);
+
+    // Assert that the initial total supply is 0 (as expected in a fresh contract)
+    assert!(_total_supply == U256::from(0));
+
+    // Assert that the sender's initial balance is also 0
+    assert!(_balance == U256::from(0));
+
+    // Call the `mint_aton_debug` function to mint 10 new tokens
+    // This function is expected to increase the total supply and update the sender's balance
+    assert!(contract.mint_aton_debug(U256::from(10)));
+
+    // Retrieve the updated total supply after minting tokens
+    _total_supply = contract.total_supply();
+
+    // Log the updated total supply to the console for debugging purposes
+    println!("\n\nTotal Supply2: {}", _total_supply);
+
+    // Assert that the total supply has increased by the expected amount (10 tokens)
+    assert!(_total_supply == U256::from(10));
+
+    // Retrieve the sender's updated balance after minting tokens
+    _balance = contract.balances.get(sender);
+
+    // Assert that the sender's balance has increased by the minted amount (10 tokens)
+    assert!(_balance == U256::from(10));
+}
 
 
-//         #[motsu::test]
-//     fn mint_aton(contract: Erc20Aton) {
-// let  val = msg::value();
-// print!("Value: {}", val);
-//         assert!(contract.mint_aton());
-//         contract.mint_aton();
 
-//     }
+#[motsu::test]
+fn update_new_arenaton_engine(contract: Erc20Aton) {
+    let  sender = msg::sender();
+    assert!(!contract.is_engine(sender));
 
 
-    // Uncomment below tests if you are actually using them in your Erc20Aton:
-    /*
-    #[motsu::test]
-    fn can_set_number(contract: Erc20Aton) {
-        let new_number = U256::from(10);
-        contract.set_number(new_number);
-        let number = contract.number();
-        assert_eq!(number, new_number);
-    }
 
-    #[motsu::test]
-    fn can_increment_number(contract: Erc20Aton) {
-        contract.set_number(U256::from(5));
-        contract.increment();
-        let number = contract.number();
-        assert_eq!(number, U256::from(6));
-    }
+        assert!(contract.initialize());
 
-    #[motsu::test]
-    fn can_add_number(contract: Erc20Aton) {
-        contract.set_number(U256::from(5));
-        contract.add_number(U256::from(3));
-        let number = contract.number();
-        assert_eq!(number, U256::from(8));
-    }
+    assert!(sender == contract.owner());
 
-    #[motsu::test]
-    fn can_mul_number(contract: Erc20Aton) {
-        contract.set_number(U256::from(5));
-        contract.mul_number(U256::from(2));
-        let number = contract.number();
-        assert_eq!(number, U256::from(10));
-    }
-    */
+
+
+assert!(contract.update_engine(sender, true).is_ok());
+
+
+    assert!(contract.is_engine(sender));
+}
+
+
 }
