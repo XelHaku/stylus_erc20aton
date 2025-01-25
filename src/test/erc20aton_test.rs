@@ -4,114 +4,87 @@
 mod tests {
     use crate::Erc20Aton;
     use stylus_sdk::{
-        alloy_primitives::{address, Address, U256},msg,
+        alloy_primitives::{address, Address, U256}, msg,
         prelude::*,
     };
-    // If you are not actually using these two, comment them out:
-    // use crate::test::constants::env_vars::{get_env_vars, EnvVars};
+
+    // Vault address constant used for testing
     const VAULT_ADDRESS: &str = "0x7e32B54800705876D3B5CfBC7d9C226A211F7C1A";
-const ARENATON_ENGINE: &str = "0x7e32B54800705876D3B5CfBC7d9C226A211F7C1A";
+    // ArenaTon engine address constant used for testing
+    const ARENATON_ENGINE: &str = "0x7e32B54800705876D3B5CfBC7d9C226A211F7C1A";
+
+    /// Test the ERC20 contract parameters such as name, symbol, decimals, and vault address.
     #[motsu::test]
     fn erc20params(contract: Erc20Aton) {
         let name = contract.name();
         let symbol = contract.symbol();
         let decimals = contract.decimals();
         let vault_address = contract.vault_address();
+
         println!(
             "\n\nName: {}, Symbol: {}, Decimals: {}, Vault Address: {}",
             name, symbol, decimals, vault_address
         );
+
+        // Assert the expected values for ERC20 token parameters
         assert_eq!(decimals, 18u8);
         assert_eq!(name, "ATON Stylus");
         assert_eq!(symbol, "ATON");
-        assert!(vault_address.is_zero());
+        assert!(vault_address.is_zero()); // Vault address should initially be zero
     }
 
+    /// Test the initialization of the ERC20 contract.
     #[motsu::test]
     fn initialize(contract: Erc20Aton) {
+        // Ensure the contract initializes successfully
         assert!(contract.initialize());
+        
+        // Check and print the owner of the contract after initialization
         let owner = contract.owner();
         println!("\n\nOwner: {}", owner);
-        assert!(!owner.is_zero());
+        assert!(!owner.is_zero()); // Owner should not be zero after initialization
     }
+
+    /// Test the functionality for setting the vault address.
     #[motsu::test]
     fn set_vault(contract: Erc20Aton) {
-        // Instead of parse_checksummed, just parse hex ignoring checksums:
-        let vault_address = VAULT_ADDRESS;
-        let parsed: Address = vault_address
+        // Parse the vault address from the constant
+        let parsed: Address = VAULT_ADDRESS
             .parse()
             .expect("Should parse valid hex address");
 
-        // Compare to a known-lowercase literal.
-        // No `0x` prefix and all-lowercase for `address!()`
+        // Expected vault address in lowercase for comparison
         let expected = address!("7e32b54800705876d3b5cfbc7d9c226a211f7c1a");
 
+        // Assert that the parsed address matches the expected address
         assert_eq!(parsed, expected);
 
-        // If desired, set it in the contract
+        // Set the vault address in the contract
         contract.set_vault(parsed);
+
+        // Verify that the vault address was correctly set
         assert_eq!(contract.vault_address(), parsed);
     }
-#[motsu::test]
-fn mint_aton_debug_test(contract: Erc20Aton) {
-    // Get the address of the sender to check balances and interact with the contract
-    let sender = msg::sender();
-
-    // Retrieve the initial total supply of the token
-    let mut _total_supply = contract.total_supply();
-
-    // Check the sender's initial balance
-    let mut _balance = contract.balances.get(sender);
-
-    // Log the initial total supply to the console for debugging purposes
-    println!("\n\nTotal Supply: {}", _total_supply);
-
-    // Assert that the initial total supply is 0 (as expected in a fresh contract)
-    assert!(_total_supply == U256::from(0));
-
-    // Assert that the sender's initial balance is also 0
-    assert!(_balance == U256::from(0));
-
-    // Call the `mint_aton_debug` function to mint 10 new tokens
-    // This function is expected to increase the total supply and update the sender's balance
-    assert!(contract.mint_aton_debug(U256::from(10)));
-
-    // Retrieve the updated total supply after minting tokens
-    _total_supply = contract.total_supply();
-
-    // Log the updated total supply to the console for debugging purposes
-    println!("\n\nTotal Supply2: {}", _total_supply);
-
-    // Assert that the total supply has increased by the expected amount (10 tokens)
-    assert!(_total_supply == U256::from(10));
-
-    // Retrieve the sender's updated balance after minting tokens
-    _balance = contract.balances.get(sender);
-
-    // Assert that the sender's balance has increased by the minted amount (10 tokens)
-    assert!(_balance == U256::from(10));
-}
 
 
+    /// Test updating and verifying the ArenaTon engine functionality.
+    #[motsu::test]
+    fn update_new_arenaton_engine(contract: Erc20Aton) {
+        let sender = msg::sender(); // Get the address of the sender
 
-#[motsu::test]
-fn update_new_arenaton_engine(contract: Erc20Aton) {
-    let  sender = msg::sender();
-    assert!(!contract.is_engine(sender));
+        // Verify that the sender is not initially set as a stake engine
+        assert!(!contract.is_stake_engine(sender));
 
-
-
+        // Initialize the contract
         assert!(contract.initialize());
 
-    assert!(sender == contract.owner());
+        // Verify that the sender is the owner after initialization
+        assert!(sender == contract.owner());
 
+        // Update the sender to be recognized as a stake engine
+        assert!(contract.update_stake_engine(sender, true).is_ok());
 
-
-assert!(contract.update_engine(sender, true).is_ok());
-
-
-    assert!(contract.is_engine(sender));
-}
-
-
+        // Verify that the sender is now recognized as a stake engine
+        assert!(contract.is_stake_engine(sender));
+    }
 }

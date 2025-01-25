@@ -45,7 +45,7 @@ The `ERC20ATON` contract is a custom ERC20 token implementation named "ATON" bui
 - **Access:** Public
 - **Returns:** `Result<bool, ATONError>`
 
-### 7. `update_engine(account: Address, status: bool)`
+### 7. `update_stake_engine(account: Address, status: bool)`
 - **Description:** Grants or revokes Arenaton engine status for a specified address. Only callable by the owner.
 - **Access:** Public
 - **Returns:** `Result<(), ATONError>`
@@ -125,7 +125,7 @@ assert!(transfer_tx.is_ok());
 ### Integration
 - Use the provided interface to interact with the contract.
 - Ensure proper management of Arenaton engine roles and vault configurations.
-- Implement necessary security practices when interacting with sensitive functions like `update_engine` or `mint_aton_from_eth()`.
+- Implement necessary security practices when interacting with sensitive functions like `update_stake_engine` or `mint_aton_from_eth()`.
 
 ---
 

@@ -1,9 +1,10 @@
 // Allow `cargo stylus export-abi` to generate a main function.
 #![cfg_attr(not(any(test, feature = "export-abi")), no_main)]
+
 extern crate alloc;
 mod test;
-// Modules and imports
 
+// Imports from the Stylus SDK
 use stylus_sdk::prelude::*;
 use stylus_sdk::{
     alloy_primitives::{Address, U256},
@@ -12,99 +13,100 @@ use stylus_sdk::{
     call::Call,
     contract, evm, msg,
 };
-// use alloy_sol_macro::sol;
-// `Counter` will be the entrypoint.
+
+// Storage definition for the ERC20Aton contract.
 sol_storage! {
+    /// ERC20Aton storage structure containing core elements for an ERC20 token.
+    ///
+    /// # Fields
+    /// - `owner`: The owner of the contract with special privileges (e.g., updating stake engines).
+    /// - `balances`: Maps each address to its token balance.
+    /// - `allowances`: Maps each owner to a mapping of spender addresses and their approved spending amounts.
+    /// - `total_supply`: The total supply of tokens in existence.
+    /// - `stake_engine`: Mapping that indicates which addresses are allowed to mint tokens.
+    /// - `vault_address`: Address of the vault contract for commission handling.
     #[entrypoint]
     pub struct Erc20Aton {
-
-
+        /// The owner of the contract with privileged access.
         address owner;
-                            /// Maps users to balances
+        /// Mapping of addresses to token balances.
         #[allow(clippy::used_underscore_binding)]
         mapping(address => uint256) balances;
-        /// Maps users to a mapping of each spender's allowance
+        /// Mapping of addresses to allowances for spenders.
         mapping(address => mapping(address => uint256)) allowances;
-        /// The total supply of the token
+        /// Total supply of the token.
         uint256 total_supply;
-
-        mapping(address => bool) arenaton_engine;
-
+        /// Mapping to track staking engines (privileged accounts for minting).
+        mapping(address => bool) stake_engine;
+        /// Address of the vault contract for commission handling.
         address vault_address;
-
-
-
     }
-
-
-
-
-
 }
 
+// Interface definition for the vault contract.
 sol_interface! {
-        interface IVault {
+    /// Vault interface for managing player commissions.
+    ///
+    /// # Methods
+    /// - `playerCommission(address)`: Returns the accrued commission for a player.
+    /// - `clearCommission(address)`: Clears the commission for a player.
+    interface IVault {
+        /// Retrieves the commission for a specific player.
+        function playerCommission(address player) external view returns (uint256);
 
-    function playerCommission(address player) external view returns (uint256);
-
-    function clearCommission(address player) external;
-
-        }
+        /// Clears the commission for a specific player.
+        function clearCommission(address player) external;
+    }
 }
+
+// Definition of events, errors, and associated data structures for the contract.
 sol! {
-
-
-    // ATON
+    // Events related to commissions.
     event CommissionAccumulate(uint256 indexed amount, uint256 indexed newAccPerToken, uint256 indexed totalCommission);
     event EngineUpdated(address indexed account, bool status);
     error Zero(address account);
 
+    // Access control events.
+    event EngineRoleGranted(address indexed account, address indexed sender);
+    event EngineRoleRevoked(address indexed account, address indexed sender);
 
-        // Access Control
-    event EngineRoleGranted( address indexed account, address indexed sender);
-    event EngineRoleRevoked( address indexed account, address indexed sender);
-
-
-    // Ownership
+    // Ownership-related events.
     event OwnershipTransferred(address indexed previous_owner, address indexed new_owner);
     error UnauthorizedAccount(address account);
 
-     // ERC20
+    // ERC20 events.
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
 
-        error ERC20InsufficientBalance(address sender, uint256 balance, uint256 needed);
-        error ERC20InvalidSender(address sender);
-        error ERC20InvalidReceiver(address receiver);
-        error ERC20InsufficientAllowance(address spender, uint256 allowance, uint256 needed);
-        error ERC20InvalidSpender(address spender);
-        error ERC20InvalidApprover(address approver);
-
+    // ERC20-related errors.
+    error ERC20InsufficientBalance(address sender, uint256 balance, uint256 needed);
+    error ERC20InvalidSender(address sender);
+    error ERC20InvalidReceiver(address receiver);
+    error ERC20InsufficientAllowance(address spender, uint256 allowance, uint256 needed);
+    error ERC20InvalidSpender(address spender);
+    error ERC20InvalidApprover(address approver);
 }
 
-/// Represents the ways methods may fail.
+/// Enum representing the various errors that can occur in the contract.
 #[derive(SolidityError)]
-pub enum ATONError {
+pub enum Error {
+    /// Thrown when an operation involves an address or value that is zero.
     Zero(Zero),
+    /// Thrown when a caller without authorization attempts an owner-only function.
     UnauthorizedAccount(UnauthorizedAccount),
-    /// Indicates an error related to the current balance of `sender`. Used in
-    /// transfers.
+    /// Thrown when the sender's balance is insufficient to complete a transfer.
     InsufficientBalance(ERC20InsufficientBalance),
-    /// Indicates a failure with the token `sender`. Used in transfers.
+    /// Thrown when the `from` address in a transfer is invalid.
     InvalidSender(ERC20InvalidSender),
-    /// Indicates a failure with the token `receiver`. Used in transfers.
+    /// Thrown when the `to` address in a transfer is invalid.
     InvalidReceiver(ERC20InvalidReceiver),
-    /// Indicates a failure with the `spender`’s `allowance`. Used in
-    /// transfers.
+    /// Thrown when the spender does not have sufficient allowance.
     InsufficientAllowance(ERC20InsufficientAllowance),
-    /// Indicates a failure with the `spender` to be approved. Used in
-    /// approvals.
+    /// Thrown when the spender address is invalid.
     InvalidSpender(ERC20InvalidSpender),
-    /// Indicates a failure with the `approver` of a token to be approved. Used
-    /// in approvals. approver Address initiating an approval operation.
+    /// Thrown when the approver address is invalid.
     InvalidApprover(ERC20InvalidApprover),
 }
-
 #[public]
 impl Erc20Aton {
     /// Retrieves the current number from storage.
@@ -147,13 +149,13 @@ impl Erc20Aton {
         from: Address,
         to: Address,
         value: U256,
-    ) -> Result<bool, ATONError> {
+    ) -> Result<bool, Error> {
         // Check msg::sender() allowance
         let mut sender_allowances = self.allowances.setter(from);
         let mut allowance = sender_allowances.setter(msg::sender());
         let old_allowance = allowance.get();
         if old_allowance < value {
-            return Err(ATONError::InsufficientAllowance(
+            return Err(Error::InsufficientAllowance(
                 ERC20InsufficientAllowance {
                     spender: msg::sender(),
                     allowance: old_allowance,
@@ -166,7 +168,7 @@ impl Erc20Aton {
         allowance.set(old_allowance - value);
 
         self._pay_commissions(to, from).map_err(|_| {
-            ATONError::InsufficientBalance(ERC20InsufficientBalance {
+            Error::InsufficientBalance(ERC20InsufficientBalance {
                 sender: from,
                 balance: self.balances.get(from),
                 needed: value,
@@ -177,7 +179,7 @@ impl Erc20Aton {
 
         Ok(true)
     }
-    fn approve(&mut self, spender: Address, value: U256) -> Result<bool, ATONError> {
+    fn approve(&mut self, spender: Address, value: U256) -> Result<bool, Error> {
         let owner = msg::sender();
         self._approve(owner, spender, value, true)
     }
@@ -191,11 +193,11 @@ impl Erc20Aton {
         self.owner.get()
     }
 
-    fn transfer_ownership(&mut self, new_owner: Address) -> Result<(), ATONError> {
+    fn transfer_ownership(&mut self, new_owner: Address) -> Result<(), Error> {
         self._only_owner()?;
 
         if new_owner.is_zero() {
-            return Err(ATONError::UnauthorizedAccount(UnauthorizedAccount {
+            return Err(Error::UnauthorizedAccount(UnauthorizedAccount {
                 account: Address::ZERO,
             }));
         }
@@ -222,15 +224,16 @@ impl Erc20Aton {
         true
     }
 
+
     pub fn vault(&self) -> Address {
         self.vault_address.get()
     }
 
-    pub fn transfer(&mut self, to: Address, amount: U256) -> Result<bool, ATONError> {
+    pub fn transfer(&mut self, to: Address, amount: U256) -> Result<bool, Error> {
         let caller = msg::sender();
 
         self._pay_commissions(to, caller).map_err(|_| {
-            ATONError::InsufficientBalance(ERC20InsufficientBalance {
+            Error::InsufficientBalance(ERC20InsufficientBalance {
                 sender: msg::sender(),
                 balance: self.balances.get(caller),
                 needed: amount,
@@ -241,7 +244,7 @@ impl Erc20Aton {
         self._transfer(caller, to, amount) // 100
             .map(|_| true)
             .map_err(|_| {
-                ATONError::InsufficientBalance(ERC20InsufficientBalance {
+                Error::InsufficientBalance(ERC20InsufficientBalance {
                     sender: msg::sender(),
                     needed: amount,
                     balance: self.balances.get(msg::sender()),
@@ -250,10 +253,13 @@ impl Erc20Aton {
     }
 
     #[payable]
-    pub fn mint_aton(&mut self) -> bool {
-        if self.arenaton_engine.get(msg::sender()) == false {
-            return false;
-        }
+    pub fn mint_aton(&mut self) ->  Result<bool, Error> {
+        // if self.stake_engine.get(msg::sender()) == false {
+        //     return Err(Error::UnauthorizedAccount(UnauthorizedAccount {
+        //         account: msg::sender(),
+                
+        //     }));
+        // }
 
         let _ = self._mint(msg::sender(), msg::value());
 
@@ -264,34 +270,12 @@ impl Erc20Aton {
             value: msg::value(),
         });
 
-        true
-    }
-
-    pub fn mint_aton_debug(&mut self, _amount: U256) -> bool {
-    
-
-        let _ = self._mint(msg::sender(), _amount);
-        // // // Increasing balance
-        // let mut balance = self.balances.setter(msg::sender());
-        // let new_balance = balance.get() + _amount;
-        // balance.set(new_balance);
-
-        // // // Increasing total supply
-        // self.total_supply
-        //     .set(self.total_supply.get() + _amount);
-
-        // Emitting the transfer event
-        evm::log(Transfer {
-            from: Address::ZERO,
-            to: msg::sender(),
-            value: _amount,
-        });
-
-        true
+        Ok(true)
     }
 
 
-    pub fn swap(&mut self, amount: U256) -> Result<bool, ATONError> {
+
+    pub fn swap(&mut self, amount: U256) -> Result<bool, Error> {
         let sender = msg::sender();
 
         let contract_balance = contract::balance();
@@ -300,7 +284,7 @@ impl Erc20Aton {
             || self.balances.get(sender) < amount
             || contract_balance < amount
         {
-            return Err(ATONError::Zero(Zero { account: sender })); // Add the error struct
+            return Err(Error::Zero(Zero { account: sender })); // Add the error struct
         }
         let _ = self._burn(sender, amount);
         let _ = transfer_eth(sender, amount);
@@ -308,13 +292,13 @@ impl Erc20Aton {
         Ok(true)
     }
 
-    /// Allows the owner to update the status of `arenaton_engine` for a specific address.
-    pub fn update_engine(&mut self, account: Address, status: bool) -> Result<(), ATONError> {
+    /// Allows the owner to update the status of `stake_engine` for a specific address.
+    pub fn update_stake_engine(&mut self, account: Address, status: bool) -> Result<(), Error> {
         // Ensure only the owner can call this function
         self._only_owner()?;
 
-        // Update the `arenaton_engine` mapping
-        let mut engine = self.arenaton_engine.setter(account);
+        // Update the `stake_engine` mapping
+        let mut engine = self.stake_engine.setter(account);
         engine.set(status);
 
         // Emit an event (optional, but recommended for transparency)
@@ -323,8 +307,8 @@ impl Erc20Aton {
         Ok(())
     }
 
-    pub fn is_engine(&self, account: Address) -> bool {
-        self.arenaton_engine.get(account)
+    pub fn is_stake_engine(&self, account: Address) -> bool {
+        self.stake_engine.get(account)
     }
 }
 
@@ -355,15 +339,15 @@ impl Erc20Aton {
         spender: Address,
         value: U256,
         emit_event: bool,
-    ) -> Result<bool, ATONError> {
+    ) -> Result<bool, Error> {
         if owner.is_zero() {
-            return Err(ATONError::InvalidApprover(ERC20InvalidApprover {
+            return Err(Error::InvalidApprover(ERC20InvalidApprover {
                 approver: Address::ZERO,
             }));
         }
 
         if spender.is_zero() {
-            return Err(ATONError::InvalidSpender(ERC20InvalidSpender {
+            return Err(Error::InvalidSpender(ERC20InvalidSpender {
                 spender: Address::ZERO,
             }));
         }
@@ -399,14 +383,14 @@ impl Erc20Aton {
     /// # Events
     ///
     /// Emits a [`Transfer`] event.
-    fn _transfer(&mut self, from: Address, to: Address, value: U256) -> Result<(), ATONError> {
+    fn _transfer(&mut self, from: Address, to: Address, value: U256) -> Result<(), Error> {
         if from.is_zero() {
-            return Err(ATONError::InvalidSender(ERC20InvalidSender {
+            return Err(Error::InvalidSender(ERC20InvalidSender {
                 sender: Address::ZERO,
             }));
         }
         if to.is_zero() {
-            return Err(ATONError::InvalidReceiver(ERC20InvalidReceiver {
+            return Err(Error::InvalidReceiver(ERC20InvalidReceiver {
                 receiver: Address::ZERO,
             }));
         }
@@ -436,9 +420,9 @@ impl Erc20Aton {
     /// # Events
     ///
     /// Emits a [`Transfer`] event.
-    pub fn _burn(&mut self, account: Address, value: U256) -> Result<(), ATONError> {
+    pub fn _burn(&mut self, account: Address, value: U256) -> Result<(), Error> {
         if account == Address::ZERO {
-            return Err(ATONError::InvalidSender(ERC20InvalidSender {
+            return Err(Error::InvalidSender(ERC20InvalidSender {
                 sender: Address::ZERO,
             }));
         }
@@ -469,11 +453,11 @@ impl Erc20Aton {
         owner: Address,
         spender: Address,
         value: U256,
-    ) -> Result<(), ATONError> {
+    ) -> Result<(), Error> {
         let current_allowance = self.allowance(owner, spender);
         if current_allowance != U256::MAX {
             if current_allowance < value {
-                return Err(ATONError::InsufficientAllowance(
+                return Err(Error::InsufficientAllowance(
                     ERC20InsufficientAllowance {
                         spender,
                         allowance: current_allowance,
@@ -505,9 +489,9 @@ impl Erc20Aton {
     /// # Events
     ///
     /// Emits a [`Transfer`] event.
-    pub fn _mint(&mut self, account: Address, value: U256) -> Result<(), ATONError> {
+    pub fn _mint(&mut self, account: Address, value: U256) -> Result<(), Error> {
         if account.is_zero() {
-            return Err(ATONError::InvalidReceiver(ERC20InvalidReceiver {
+            return Err(Error::InvalidReceiver(ERC20InvalidReceiver {
                 receiver: Address::ZERO,
             }));
         }
@@ -538,13 +522,13 @@ impl Erc20Aton {
     /// # Events
     ///
     /// Emits a [`Transfer`] event.
-    pub fn _update(&mut self, from: Address, to: Address, value: U256) -> Result<(), ATONError> {
+    pub fn _update(&mut self, from: Address, to: Address, value: U256) -> Result<(), Error> {
         if from.is_zero() {
             // Mint operation. Overflow check required: the rest of the code
             // assumes that `total_supply` never overflows.
             let current_supply = self.total_supply.get();
             let new_supply = current_supply.checked_add(value).ok_or_else(|| {
-                ATONError::InsufficientBalance(ERC20InsufficientBalance {
+                Error::InsufficientBalance(ERC20InsufficientBalance {
                     sender: from,
                     balance: current_supply,
                     needed: value,
@@ -555,7 +539,7 @@ impl Erc20Aton {
             // Check the `from` balance before deduction
             let from_balance = self.balances.get(from);
             if from_balance < value {
-                return Err(ATONError::InsufficientBalance(ERC20InsufficientBalance {
+                return Err(Error::InsufficientBalance(ERC20InsufficientBalance {
                     sender: from,
                     balance: from_balance,
                     needed: value,
@@ -569,7 +553,7 @@ impl Erc20Aton {
             // Burn operation: decrease total supply
             let current_supply = self.total_supply.get();
             let new_supply = current_supply.checked_sub(value).ok_or_else(|| {
-                ATONError::InsufficientBalance(ERC20InsufficientBalance {
+                Error::InsufficientBalance(ERC20InsufficientBalance {
                     sender: from,
                     balance: current_supply,
                     needed: value,
@@ -580,7 +564,7 @@ impl Erc20Aton {
             // Safely increase the `to` balance
             let to_balance = self.balances.get(to);
             let new_balance = to_balance.checked_add(value).ok_or_else(|| {
-                ATONError::InsufficientBalance(ERC20InsufficientBalance {
+                Error::InsufficientBalance(ERC20InsufficientBalance {
                     sender: to,
                     balance: to_balance,
                     needed: value,
@@ -596,10 +580,10 @@ impl Erc20Aton {
     }
 
     // Ownable
-    pub fn _only_owner(&self) -> Result<(), ATONError> {
+    pub fn _only_owner(&self) -> Result<(), Error> {
         let account = msg::sender();
         if self.owner.get() != account {
-            return Err(ATONError::UnauthorizedAccount(UnauthorizedAccount {
+            return Err(Error::UnauthorizedAccount(UnauthorizedAccount {
                 account,
             }));
         }
@@ -620,7 +604,7 @@ impl Erc20Aton {
     fn _player_commission(&mut self, vault: &IVault, account: Address) -> U256 {
         vault
             .player_commission(Call::new_in(self), account)
-            .map_err(|_| ATONError::Zero(Zero { account }))
+            .map_err(|_| Error::Zero(Zero { account }))
             .unwrap_or_default()
     }
 
@@ -630,9 +614,9 @@ impl Erc20Aton {
         from: Address,
         to: Address,
         amount: U256,
-    ) -> Result<(), ATONError> {
+    ) -> Result<(), Error> {
         self._transfer(from, to, amount).map_err(|_| {
-            ATONError::InsufficientBalance(ERC20InsufficientBalance {
+            Error::InsufficientBalance(ERC20InsufficientBalance {
                 sender: from,
                 needed: amount,
                 balance: self.balances.get(from),
@@ -641,13 +625,13 @@ impl Erc20Aton {
     }
 
     // Helper function to clear commission in the vault
-    fn _clear_commission(&mut self, vault: &IVault, account: Address) -> Result<(), ATONError> {
+    fn _clear_commission(&mut self, vault: &IVault, account: Address) -> Result<(), Error> {
         vault
             .clear_commission(Call::new_in(self), account)
-            .map_err(|_| ATONError::Zero(Zero { account }))
+            .map_err(|_| Error::Zero(Zero { account }))
     }
 
-    pub fn _pay_commissions(&mut self, to: Address, from: Address) -> Result<(), ATONError> {
+    pub fn _pay_commissions(&mut self, to: Address, from: Address) -> Result<(), Error> {
         let vault_contract = IVault::new(self.vault_address.get());
 
         let from_commission = self._player_commission(&vault_contract, from);
